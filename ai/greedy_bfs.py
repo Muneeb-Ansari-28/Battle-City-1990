@@ -14,6 +14,16 @@ EAGLE  = 5
 
 DIRECTIONS = [(0, -1), (0, 1), (-1, 0), (1, 0)]   # UP DOWN LEFT RIGHT
 
+
+def _tiles_and_size(grid) -> tuple[list[list[int]], int, int]:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles, len(tiles[0]), len(tiles)
+
+
+def _tile_at(grid, x: int, y: int) -> int:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles[y][x]
+
 # Tiles the Fast Tank can physically move through
 GREEDY_PASSABLE = {EMPTY, FOREST, EAGLE}
 
@@ -41,11 +51,13 @@ def greedy_next_step(grid: list[list[int]],
     best_tile  = None
     best_h     = float('inf')
 
+    tiles, w, h = _tiles_and_size(grid)
+
     for dx, dy in DIRECTIONS:
         nx, ny = sx + dx, sy + dy
-        if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+        if not (0 <= nx < w and 0 <= ny < h):
             continue
-        tile = grid[ny][nx]
+        tile = _tile_at(tiles, nx, ny)
         if tile in GREEDY_PASSABLE or (nx, ny) == (gx, gy):
             h = _manhattan(nx, ny, gx, gy)
             if h < best_h:
@@ -77,11 +89,13 @@ def greedy_should_shoot_brick(grid: list[list[int]],
     if dy != 0:
         candidates.append((0, dy))
 
+    tiles, w, h = _tiles_and_size(grid)
+
     for cdx, cdy in candidates:
         nx, ny = sx + cdx, sy + cdy
-        if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+        if not (0 <= nx < w and 0 <= ny < h):
             continue
-        if grid[ny][nx] == BRICK:
+        if _tile_at(tiles, nx, ny) == BRICK:
             return True
 
     return False

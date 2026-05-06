@@ -21,6 +21,16 @@ BFS_PASSABLE = {EMPTY, FOREST, EAGLE}
 DIRECTIONS = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # UP DOWN LEFT RIGHT
 
 
+def _tiles_and_size(grid) -> tuple[list[list[int]], int, int]:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles, len(tiles[0]), len(tiles)
+
+
+def _tile_at(grid, x: int, y: int) -> int:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles[y][x]
+
+
 def bfs_next_step(grid: list[list[int]],
                   start: tuple[int, int],
                   goal: tuple[int, int]) -> tuple[int, int] | None:
@@ -55,13 +65,15 @@ def bfs_next_step(grid: list[list[int]],
             found = True
             break
 
+        tiles, w, h = _tiles_and_size(grid)
+
         for dx, dy in DIRECTIONS:
             nx, ny = cx + dx, cy + dy
             if (nx, ny) in visited:
                 continue
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            tile = grid[ny][nx]
+            tile = _tile_at(tiles, nx, ny)
             # Goal tile is always considered reachable
             if tile in BFS_PASSABLE or (nx, ny) == (gx, gy):
                 visited[(nx, ny)] = (cx, cy)
@@ -110,13 +122,15 @@ def bfs_full_path(grid: list[list[int]],
         if (cx, cy) == (gx, gy):
             found = True
             break
+        tiles, w, h = _tiles_and_size(grid)
+
         for dx, dy in DIRECTIONS:
             nx, ny = cx + dx, cy + dy
             if (nx, ny) in visited:
                 continue
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            tile = grid[ny][nx]
+            tile = _tile_at(tiles, nx, ny)
             if tile in BFS_PASSABLE or (nx, ny) == (gx, gy):
                 visited[(nx, ny)] = (cx, cy)
                 queue.append((nx, ny))
@@ -147,14 +161,16 @@ def bfs_nearest_steel(grid: list[list[int]],
     queue.append((sx, sy))
     visited.add((sx, sy))
 
+    tiles, w, h = _tiles_and_size(grid)
+
     while queue:
         cx, cy = queue.popleft()
         # Check if any neighbour is steel → this tile is "cover"
         for dx, dy in DIRECTIONS:
             nx, ny = cx + dx, cy + dy
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            if grid[ny][nx] == STEEL:
+            if _tile_at(tiles, nx, ny) == STEEL:
                 return (cx, cy)   # stand here for cover
 
         # Expand BFS through passable tiles
@@ -162,9 +178,9 @@ def bfs_nearest_steel(grid: list[list[int]],
             nx, ny = cx + dx, cy + dy
             if (nx, ny) in visited:
                 continue
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            if grid[ny][nx] in BFS_PASSABLE:
+            if _tile_at(tiles, nx, ny) in BFS_PASSABLE:
                 visited.add((nx, ny))
                 queue.append((nx, ny))
 

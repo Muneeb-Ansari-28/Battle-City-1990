@@ -8,22 +8,25 @@ import random
 from collections import deque
 from typing import Optional
 
-# ── Tile type constants (must match constants.py) ──────────
-EMPTY  = 0
-BRICK  = 1
-STEEL  = 2
-WATER  = 3
-FOREST = 4
-EAGLE  = 5
+from constants import (
+    EMPTY,
+    BRICK,
+    STEEL,
+    WATER,
+    FOREST,
+    EAGLE,
+    GRID_SIZE,
+    EAGLE_POS,
+    PLAYER_SPAWN,
+    ENEMY_SPAWNS,
+    CSP_MAX_WALL_RATIO,
+)
+
+UNASSIGNED = None
 
 # ── Grid dimensions ────────────────────────────────────────
-GRID_W = 26
-GRID_H = 26
-
-# ── Fixed positions (never assigned by CSP) ────────────────
-EAGLE_POS    = (12, 24)          # (col, row)
-PLAYER_SPAWN = (12, 22)          # Player 1 spawn
-ENEMY_SPAWNS = [(0, 0), (12, 0), (25, 0)]   # 3 enemy spawn points
+GRID_W = GRID_SIZE
+GRID_H = GRID_SIZE
 
 # Tiles that are ALWAYS fixed (never overwritten by CSP)
 FIXED_POSITIONS = set()
@@ -32,20 +35,19 @@ FIXED_POSITIONS.add(PLAYER_SPAWN)
 for sp in ENEMY_SPAWNS:
     FIXED_POSITIONS.add(sp)
 
-# Eagle "protection ring" — tiles adjacent to eagle (3×3 minus eagle itself)
-def _eagle_ring() -> set:
+# Eagle "protection ring" — tiles around eagle
+def _eagle_ring(layers: int = 1) -> set:
     ex, ey = EAGLE_POS
     ring = set()
-    for dr in (-1, 0, 1):
-        for dc in (-1, 0, 1):
-            if dr == 0 and dc == 0:
-                continue
-            r, c = ey + dr, ex + dc
-            if 0 <= r < GRID_H and 0 <= c < GRID_W:
-                ring.add((c, r))   # (col, row)
+    for layer in range(1, layers + 1):
+        for dr in range(-layer, layer + 1):
+            for dc in range(-layer, layer + 1):
+                if abs(dr) != layer and abs(dc) != layer:
+                    continue
+                r, c = ey + dr, ex + dc
+                if 0 <= r < GRID_H and 0 <= c < GRID_W:
+                    ring.add((c, r))
     return ring
-
-EAGLE_RING = _eagle_ring()
 
 
 # ── Passability for BFS ────────────────────────────────────
@@ -53,13 +55,13 @@ _PASSABLE = {EMPTY, FOREST, EAGLE, BRICK}   # treat BRICK as passable for reacha
 # (enemy tanks can shoot through brick — path just needs to be navigable)
 
 
-def _bfs_reachable(grid: list[list[int]], src: tuple, dst: tuple) -> bool:
+def _bfs_reachable(grid: list[list[int | None]], src: tuple, dst: tuple) -> bool:
     """Return True if dst is reachable from src through passable tiles."""
     sx, sy = src
     dx, dy = dst
     if not (0 <= sy < GRID_H and 0 <= sx < GRID_W):
         return False
-    if grid[sy][sx] not in _PASSABLE and (sx, sy) != src:
+    if grid[sy][sx] not in _PASSABLE and grid[sy][sx] is not UNASSIGNED and (sx, sy) != src:
         return False
     visited = set()
     queue = deque([(sx, sy)])
@@ -70,18 +72,19 @@ def _bfs_reachable(grid: list[list[int]], src: tuple, dst: tuple) -> bool:
             return True
         for nx, ny in [(cx+1,cy),(cx-1,cy),(cx,cy+1),(cx,cy-1)]:
             if (nx, ny) not in visited and 0 <= ny < GRID_H and 0 <= nx < GRID_W:
-                if grid[ny][nx] in _PASSABLE or (nx, ny) == dst:
+                tile = grid[ny][nx]
+                if tile in _PASSABLE or tile is UNASSIGNED or (nx, ny) == dst:
                     visited.add((nx, ny))
                     queue.append((nx, ny))
     return False
 
 
-def _count_walls(grid: list[list[int]]) -> int:
+def _count_walls(grid: list[list[int | None]]) -> int:
     return sum(1 for r in range(GRID_H) for c in range(GRID_W)
                if grid[r][c] in (BRICK, STEEL))
 
 
-def _wall_density(grid: list[list[int]]) -> float:
+def _wall_density(grid: list[list[int | None]]) -> float:
     total = GRID_W * GRID_H - len(FIXED_POSITIONS)
     return _count_walls(grid) / total
 
@@ -105,6 +108,9 @@ class CSPMapGenerator:
         self.level = level
         self.rng   = random.Random(seed)
 
+        self.ring_layers = 2 if level == 1 else 1
+        self.eagle_ring = _eagle_ring(self.ring_layers)
+
         # Per-level tuning: (brick_prob, steel_prob, water_prob, forest_prob)
         self._level_weights = {
             1: (0.30, 0.05, 0.05, 0.05),   # dense brick, few steel
@@ -114,6 +120,9 @@ class CSPMapGenerator:
         w = self._level_weights.get(level, self._level_weights[1])
         self.brick_p, self.steel_p, self.water_p, self.forest_p = w
         self.empty_p = 1.0 - sum(w)
+
+        total_cells = GRID_W * GRID_H - len(FIXED_POSITIONS)
+        self.max_walls = int(CSP_MAX_WALL_RATIO * total_cells)
 
     # ── Public API ────────────────────────────────────────
     def generate(self, max_attempts: int = 20) -> list[list[int]]:
@@ -125,10 +134,12 @@ class CSPMapGenerator:
             grid = self._blank_grid()
             self._place_fixed(grid)
             self._force_eagle_ring(grid)
-            self._fill_probabilistic(grid)
-            if self._all_constraints_satisfied(grid):
-                print(f"[CSP] Valid map generated on attempt {attempt + 1}")
-                return grid
+
+            if self._backtrack_fill(grid, max_steps=200000):
+                if self._all_constraints_satisfied(grid):
+                    print(f"[CSP] Valid map generated on attempt {attempt + 1}")
+                    return grid
+
             # Backtrack: try again with a different random seed
             self.rng = random.Random(self.rng.randint(0, 2**32))
 
@@ -138,7 +149,7 @@ class CSPMapGenerator:
 
     # ── Grid construction ────────────────────────────────
     def _blank_grid(self) -> list[list[int]]:
-        return [[EMPTY] * GRID_W for _ in range(GRID_H)]
+        return [[UNASSIGNED] * GRID_W for _ in range(GRID_H)]
 
     def _place_fixed(self, grid: list[list[int]]) -> None:
         """Place eagle and clear spawn areas."""
@@ -150,8 +161,7 @@ class CSPMapGenerator:
 
     def _force_eagle_ring(self, grid: list[list[int]]) -> None:
         """C1: surround eagle with at least one ring of BRICK/STEEL."""
-        for (cx, cy) in EAGLE_RING:
-            # Eagle ring tiles are always BRICK (first ring protection)
+        for (cx, cy) in self.eagle_ring:
             grid[cy][cx] = BRICK
 
     def _fill_probabilistic(self, grid: list[list[int]]) -> None:
@@ -160,7 +170,7 @@ class CSPMapGenerator:
             (c, r)
             for r in range(GRID_H)
             for c in range(GRID_W)
-            if (c, r) not in FIXED_POSITIONS and (c, r) not in EAGLE_RING
+            if (c, r) not in FIXED_POSITIONS and (c, r) not in self.eagle_ring
         ]
         # Shuffle for randomness
         self.rng.shuffle(positions)
@@ -195,10 +205,71 @@ class CSPMapGenerator:
             else:
                 grid[cy][cx] = EMPTY
 
+    def _backtrack_fill(self, grid: list[list[int | None]], max_steps: int = 200000) -> bool:
+        positions = [
+            (c, r)
+            for r in range(GRID_H)
+            for c in range(GRID_W)
+            if (c, r) not in FIXED_POSITIONS and (c, r) not in self.eagle_ring
+        ]
+        self.rng.shuffle(positions)
+        self._backtrack_steps = 0
+        return self._assign_positions(grid, positions, 0, 0, max_steps)
+
+    def _assign_positions(self, grid, positions, idx: int, wall_count: int, max_steps: int) -> bool:
+        if idx >= len(positions):
+            return True
+
+        self._backtrack_steps += 1
+        if self._backtrack_steps > max_steps:
+            return False
+
+        cx, cy = positions[idx]
+        for tile in self._domain_for_cell(cx, cy):
+            next_wall_count = wall_count + (1 if tile in (BRICK, STEEL) else 0)
+            if next_wall_count > self.max_walls:
+                continue
+
+            grid[cy][cx] = tile
+            if self._partial_constraints_ok(grid, next_wall_count):
+                if self._assign_positions(grid, positions, idx + 1, next_wall_count, max_steps):
+                    return True
+            grid[cy][cx] = UNASSIGNED
+
+        return False
+
+    def _domain_for_cell(self, x: int, y: int) -> list[int]:
+        px, py = PLAYER_SPAWN
+        if abs(x - px) + abs(y - py) <= 10:
+            return [EMPTY, FOREST]
+
+        for sx, sy in ENEMY_SPAWNS:
+            if abs(x - sx) + abs(y - sy) <= 2:
+                return [EMPTY]
+
+        domain = [EMPTY, BRICK, STEEL, WATER, FOREST]
+        weights = {
+            EMPTY: self.empty_p,
+            BRICK: self.brick_p,
+            STEEL: self.steel_p,
+            WATER: self.water_p,
+            FOREST: self.forest_p,
+        }
+        return sorted(domain, key=lambda t: self.rng.random() / max(weights.get(t, 0.01), 0.01))
+
+    def _partial_constraints_ok(self, grid, wall_count: int) -> bool:
+        if wall_count > self.max_walls:
+            return False
+
+        for sp in ENEMY_SPAWNS:
+            if not _bfs_reachable(grid, sp, EAGLE_POS):
+                return False
+        return True
+
     # ── Constraint checkers ───────────────────────────────
     def _check_c1_eagle_ring(self, grid: list[list[int]]) -> bool:
         """C1: every eagle-ring tile must be BRICK or STEEL."""
-        for (cx, cy) in EAGLE_RING:
+        for (cx, cy) in self.eagle_ring:
             if grid[cy][cx] not in (BRICK, STEEL):
                 return False
         return True
@@ -216,7 +287,7 @@ class CSPMapGenerator:
         px, py = PLAYER_SPAWN
         for r in range(GRID_H):
             for c in range(GRID_W):
-                if (c, r) in EAGLE_RING:
+                if (c, r) in self.eagle_ring:
                     continue   # eagle ring is intentional — exempt
                 if abs(c - px) + abs(r - py) <= 10:
                     if grid[r][c] in (BRICK, STEEL):
@@ -225,7 +296,7 @@ class CSPMapGenerator:
 
     def _check_c4_density(self, grid: list[list[int]]) -> bool:
         """C4: wall density ≤ 40%."""
-        return _wall_density(grid) <= 0.40
+        return _wall_density(grid) <= CSP_MAX_WALL_RATIO
 
     def _check_c5_water_not_blocking(self, grid: list[list[int]]) -> bool:
         """
@@ -281,8 +352,13 @@ class CSPMapGenerator:
             for c in range(2, 24, 4):
                 px, py = PLAYER_SPAWN
                 if abs(c - px) + abs(r - py) > 10:
-                    if (c, r) not in FIXED_POSITIONS and (c, r) not in EAGLE_RING:
+                    if (c, r) not in FIXED_POSITIONS and (c, r) not in self.eagle_ring:
                         grid[r][c] = BRICK
+
+        for r in range(GRID_H):
+            for c in range(GRID_W):
+                if grid[r][c] is UNASSIGNED:
+                    grid[r][c] = EMPTY
         return grid
 
 

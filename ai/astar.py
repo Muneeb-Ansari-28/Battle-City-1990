@@ -27,6 +27,16 @@ ASTAR_COSTS = {
 DIRECTIONS = [(0, -1), (0, 1), (-1, 0), (1, 0)]   # UP DOWN LEFT RIGHT
 
 
+def _tiles_and_size(grid) -> tuple[list[list[int]], int, int]:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles, len(tiles[0]), len(tiles)
+
+
+def _tile_at(grid, x: int, y: int) -> int:
+    tiles = grid._tiles if hasattr(grid, "_tiles") else grid
+    return tiles[y][x]
+
+
 def _manhattan(ax: int, ay: int, bx: int, by: int) -> int:
     return abs(ax - bx) + abs(ay - by)
 
@@ -57,6 +67,8 @@ def astar_next_step(grid: list[list[int]],
     came_from = {(sx, sy): None}
     g_cost    = {(sx, sy): 0}
 
+    tiles, w, h = _tiles_and_size(grid)
+
     while open_heap:
         f, g, (cx, cy) = heapq.heappop(open_heap)
 
@@ -76,10 +88,10 @@ def astar_next_step(grid: list[list[int]],
 
         for dx, dy in DIRECTIONS:
             nx, ny = cx + dx, cy + dy
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
 
-            tile      = grid[ny][nx]
+            tile      = _tile_at(tiles, nx, ny)
             step_cost = ASTAR_COSTS.get(tile, float('inf'))
 
             if step_cost == float('inf'):
@@ -114,6 +126,8 @@ def astar_full_path(grid: list[list[int]],
     came_from = {(sx, sy): None}
     g_cost    = {(sx, sy): 0}
 
+    tiles, w, h = _tiles_and_size(grid)
+
     while open_heap:
         f, g, (cx, cy) = heapq.heappop(open_heap)
 
@@ -131,9 +145,9 @@ def astar_full_path(grid: list[list[int]],
 
         for dx, dy in DIRECTIONS:
             nx, ny = cx + dx, cy + dy
-            if not (0 <= nx < len(grid[0]) and 0 <= ny < len(grid)):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            tile      = grid[ny][nx]
+            tile      = _tile_at(tiles, nx, ny)
             step_cost = ASTAR_COSTS.get(tile, float('inf'))
             if step_cost == float('inf'):
                 continue

@@ -18,7 +18,10 @@ class Spawner:
 
     SPAWN_POINTS = ENEMY_SPAWNS   # [(0,0),(12,0),(24,0)]
 
-    def __init__(self, tank_queue: list):
+    def __init__(self,
+                 tank_queue: list,
+                 spawn_points: list | None = None,
+                 fast_unlock_kills: int = 0):
         """
         tank_queue: ordered list of Tank instances representing
                     the 20-enemy pool for this level (not yet active).
@@ -26,9 +29,11 @@ class Spawner:
         self._queue:  list = list(tank_queue)   # remaining to spawn
         self._timer:  int  = 0                  # ticks until next spawn
         self._pending_spawn = None              # next tank waiting for safe spawn
+        self._spawn_points = list(spawn_points) if spawn_points else list(self.SPAWN_POINTS)
+        self._fast_unlock_kills = fast_unlock_kills
 
     # ── Called every tick from game loop ─────────────────────
-    def update(self, active_enemies: list, player) -> 'Tank | None':
+    def update(self, active_enemies: list, player, kills: int = 0) -> 'Tank | None':
         """
         Returns a Tank to activate this tick, or None.
         active_enemies: list of currently alive enemy tanks
@@ -55,6 +60,12 @@ class Spawner:
 
         tank = self._pending_spawn
         self._pending_spawn = None
+
+        if (self._fast_unlock_kills > 0 and kills < self._fast_unlock_kills
+                and getattr(tank, "tank_type", None) == TYPE_FAST):
+            if any(getattr(t, "tank_type", None) == TYPE_BASIC for t in self._queue):
+                from tanks.basic_tank import BasicTank
+                tank = BasicTank(0, 0, getattr(tank, "grid", None))
         tank.x, tank.y = spawn_pos
         tank.active = True
         self._timer = SPAWN_DELAY_TICKS
@@ -69,7 +80,7 @@ class Spawner:
         Returns (x, y) or None if all blocked.
         """
         occupied = {(e.x, e.y) for e in active_enemies}
-        candidates = list(self.SPAWN_POINTS)
+        candidates = list(self._spawn_points)
         random.shuffle(candidates)
 
         for sx, sy in candidates:

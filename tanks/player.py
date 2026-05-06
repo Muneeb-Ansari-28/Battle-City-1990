@@ -16,7 +16,8 @@ class PlayerTank(Tank):
     """
 
     def __init__(self, x: int = None, y: int = None):
-        px, py = x or PLAYER_SPAWN[0], y or PLAYER_SPAWN[1]
+        px = PLAYER_SPAWN[0] if x is None else x
+        py = PLAYER_SPAWN[1] if y is None else y
         super().__init__(
             x         = px,
             y         = py,
@@ -26,6 +27,7 @@ class PlayerTank(Tank):
             fire_rate = FIRE_PLAYER,
             color     = C_PLAYER,
         )
+        self.spawn_pos = (px, py)
         self.direction = UP   # player faces up at spawn
         self.lives     = PLAYER_LIVES
         self.score     = 0
@@ -77,7 +79,7 @@ class PlayerTank(Tank):
             self.respawn()
 
     def respawn(self) -> None:
-        self.x, self.y     = PLAYER_SPAWN
+        self.x, self.y     = self.spawn_pos
         self.direction      = UP
         self.hp             = PLAYER_HP
         self.alive          = True

@@ -46,17 +46,17 @@ PLAYER_SPAWN     = (4,  24)
 ENEMY_SPAWNS     = [(0, 0), (12, 0), (24, 0)]
 
 # ── Tank speed: ticks between moves ─────────────────────────
-SPEED_SLOW   = 4   # Basic
-SPEED_MEDIUM = 3   # Armor
-SPEED_FAST   = 2   # Fast
-SPEED_PLAYER = 3
+SPEED_SLOW   = 8   # Basic
+SPEED_MEDIUM = 6   # Armor
+SPEED_FAST   = 4   # Fast
+SPEED_PLAYER = 6
 
 # ── Fire rate: ticks between shots ──────────────────────────
 FIRE_BASIC   = 90   # ~3 s at 30 FPS
 FIRE_FAST    = 45   # ~1.5 s
 FIRE_ARMOR   = 60   # ~2 s
 FIRE_PLAYER  = 20   # ~0.67 s  (responsive feel)
-FIRE_BOSS_P1 = 60
+FIRE_BOSS_P1 = 15
 FIRE_BOSS_P2 = 45
 FIRE_BOSS_P3 = 24
 
@@ -64,7 +64,7 @@ FIRE_BOSS_P3 = 24
 BULLET_SPEED = 2    # tiles per tick
 
 # ── Spawn constraints ───────────────────────────────────────
-MAX_ACTIVE_ENEMIES   = 4
+MAX_ACTIVE_ENEMIES   = 3
 ENEMY_POOL_SIZE      = 20
 SPAWN_FAIRNESS_DIST  = 10   # Manhattan distance
 SPAWN_DELAY_TICKS    = 60   # 2 s between spawns
@@ -74,37 +74,49 @@ BOSS_HP         = 10
 BOSS_PHASE2_HP  = 6
 BOSS_PHASE3_HP  = 2
 
+# ── Boss movement speeds (ticks between moves) ──────────────
+BOSS_SPEED_P1   = SPEED_SLOW
+BOSS_SPEED_P2   = SPEED_MEDIUM
+BOSS_SPEED_P3   = SPEED_FAST
+
 # ── Player ──────────────────────────────────────────────────
-PLAYER_LIVES    = 3
+PLAYER_LIVES    = 10
 PLAYER_HP       = 1
 
 # ── Colors (R, G, B) ────────────────────────────────────────
 C_BLACK      = (  0,   0,   0)
 C_WHITE      = (255, 255, 255)
-C_DARKGRAY   = ( 40,  40,  40)
-C_GRAY       = (100, 100, 100)
-C_LIGHTGRAY  = (180, 180, 180)
+C_DARKGRAY   = ( 34,  36,  44)
+C_GRAY       = (100, 108, 120)
+C_LIGHTGRAY  = (188, 196, 208)
 
-C_EMPTY      = ( 20,  20,  20)       # road / dark floor
-C_BRICK      = (180,  80,  20)       # brownish red
-C_BRICK_DARK = (120,  50,  10)       # mortar lines
-C_STEEL      = (140, 140, 160)       # metallic grey
-C_WATER      = ( 30,  80, 180)       # blue
-C_WATER_DARK = ( 20,  55, 130)
-C_FOREST     = ( 30, 100,  30)       # dark green
-C_EAGLE      = (220, 180,   0)       # gold
+C_EMPTY      = ( 22,  24,  30)       # road / dark floor
+C_BRICK      = (183,  78,  30)       # brick red
+C_BRICK_DARK = (125,  52,  18)       # mortar lines
+C_STEEL      = (150, 155, 170)       # metallic grey
+C_WATER      = ( 30,  92, 196)       # blue
+C_WATER_DARK = ( 20,  66, 148)
+C_FOREST     = ( 26, 110,  46)       # deep green
+C_EAGLE      = (232, 188,  36)       # gold
 
-C_PLAYER     = ( 50, 220,  50)       # green
-C_BASIC      = (200, 200,  50)       # yellow
-C_FAST       = (220, 100,  50)       # orange
-C_ARMOR      = (100, 180, 220)       # blue-grey
-C_POWER      = (200,  50, 200)       # purple
-C_BOSS       = (220,  50,  50)       # red
+C_PLAYER     = ( 68, 238, 108)       # neon green
+C_BASIC      = (214, 204,  72)       # yellow
+C_FAST       = (240, 126,  60)       # orange
+C_ARMOR      = (106, 186, 230)       # blue-grey
+C_POWER      = (206,  84, 224)       # purple
+C_BOSS       = (236,  72,  72)       # red
 
-C_BULLET_PLY = (255, 255, 100)
-C_BULLET_ENE = (255,  80,  80)
-C_SIDEBAR    = ( 28,  28,  36)
-C_HUD_TEXT   = (220, 220, 180)
+C_BULLET_PLY = (255, 244, 138)
+C_BULLET_ENE = (255, 110, 110)
+C_SIDEBAR    = ( 22,  24,  32)
+C_HUD_TEXT   = (230, 232, 214)
+
+# ── UI accents ─────────────────────────────────────────────
+C_BG_TOP     = ( 10,  12,  18)
+C_BG_BOTTOM  = ( 24,  26,  34)
+C_GRID_LINE  = ( 32,  36,  46)
+C_PANEL      = ( 20,  24,  34)
+C_PANEL_ACC  = ( 60, 220, 255)
 
 # ── Tank types (used as tags) ────────────────────────────────
 TYPE_PLAYER = 'player'

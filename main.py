@@ -18,10 +18,11 @@ from game_loop       import GameLoop
 from spawner         import Spawner
 from level_configs   import load_map, LEVEL_CONFIGS, build_enemy_pool
 from tanks.player    import PlayerTank
-# NEW
 from tanks.basic_tank import BasicTank
 from tanks.fast_tank  import FastTank
 from tanks.armor_tank import ArmorTank
+from tanks.power_tank import PowerTank
+from tanks.boss_tank  import BossTank
 
 
 # ── State machine ─────────────────────────────────────────────
@@ -32,7 +33,7 @@ STATE_WIN      = 'win'
 STATE_LOSE     = 'lose'
 STATE_BETWEEN  = 'between'   # inter-level screen
 
-def build_enemy_queue(pool: list, grid) -> list:
+def build_enemy_queue(pool: list, grid: Grid) -> list:
     """Create real AI tank instances from a pool type list."""
     tanks = []
     for t in pool:
@@ -42,6 +43,10 @@ def build_enemy_queue(pool: list, grid) -> list:
             tanks.append(FastTank(0, 0, grid))
         elif t == "armor":
             tanks.append(ArmorTank(0, 0, grid))
+        elif t == "power":
+            tanks.append(PowerTank(0, 0, grid))
+        elif t == "boss":
+            tanks.append(BossTank(0, 0, grid))
         else:
             tanks.append(BasicTank(0, 0, grid))
     return tanks
@@ -53,38 +58,67 @@ def load_level(level_num: int, grid: Grid) -> tuple:
       - Return (player, spawner, game_loop)
     """
     # Load map
-    tiles = load_map(1)
+    tiles = load_map(level_num)
     grid.load(tiles)
 
     # Player
-    player = PlayerTank()
+    if level_num == 3:
+        player = PlayerTank(12, 22)
+    else:
+        player = PlayerTank()
 
     # Enemy pool
     config = LEVEL_CONFIGS.get(level_num, LEVEL_CONFIGS[1])
-    pool   = config['enemy_pool']
-    queue  = build_enemy_queue(pool, grid._tiles)
-    spawnr = Spawner(queue)
+    pool   = build_enemy_pool(level_num)
+    queue  = build_enemy_queue(pool, grid)
+    if level_num == 3:
+        spawnr = Spawner(queue, spawn_points=[(12, 7)],
+                         fast_unlock_kills=config.get('fast_unlock_kills', 0))
+    else:
+        spawnr = Spawner(queue,
+                         fast_unlock_kills=config.get('fast_unlock_kills', 0))
 
     return player, spawnr
 
 
 def draw_menu(renderer: Renderer) -> None:
     import pygame
-    renderer.screen.fill(C_DARKGRAY)
+    # Gradient background
+    for y in range(SCREEN_HEIGHT):
+        t = y / SCREEN_HEIGHT
+        r = int(C_BG_TOP[0] * (1 - t) + C_BG_BOTTOM[0] * t)
+        g = int(C_BG_TOP[1] * (1 - t) + C_BG_BOTTOM[1] * t)
+        b = int(C_BG_TOP[2] * (1 - t) + C_BG_BOTTOM[2] * t)
+        pygame.draw.line(renderer.screen, (r, g, b), (0, y), (SCREEN_WIDTH, y))
+
+    # Subtle scanlines
+    for y in range(0, SCREEN_HEIGHT, 6):
+        pygame.draw.line(renderer.screen, (0, 0, 0), (0, y), (SCREEN_WIDTH, y), 1)
     cx = GRID_PIXEL // 2
 
-    font_title = pygame.font.SysFont('Courier New', 40, bold=True)
-    font_sub   = pygame.font.SysFont('Courier New', 20)
-    font_small = pygame.font.SysFont('Courier New', 15)
+    font_title = pygame.font.SysFont('Bahnschrift', 48, bold=True)
+    font_sub   = pygame.font.SysFont('Bahnschrift', 18)
+    font_small = pygame.font.SysFont('Bahnschrift', 14)
+
+    # Title panel
+    panel = pygame.Rect(cx - 210, 110, 420, 140)
+    pygame.draw.rect(renderer.screen, C_PANEL, panel, border_radius=12)
+    pygame.draw.rect(renderer.screen, C_GRID_LINE, panel, 2, border_radius=12)
+    pygame.draw.rect(renderer.screen, C_PANEL_ACC,
+                     (panel.left, panel.top, 6, panel.height), border_radius=8)
 
     title = font_title.render("BATTLE CITY", True, C_EAGLE)
-    renderer.screen.blit(title, title.get_rect(center=(cx, 150)))
+    renderer.screen.blit(title, title.get_rect(center=(cx, 160)))
 
-    sub = font_sub.render("TANK 1990", True, C_HUD_TEXT)
-    renderer.screen.blit(sub, sub.get_rect(center=(cx, 200)))
+    sub = font_sub.render("TANK 1990 — AI LAB EDITION", True, C_HUD_TEXT)
+    renderer.screen.blit(sub, sub.get_rect(center=(cx, 205)))
 
-    start = font_sub.render("Press ENTER to Start", True, C_PLAYER)
-    renderer.screen.blit(start, start.get_rect(center=(cx, 310)))
+    # Start button
+    btn = pygame.Rect(cx - 160, 280, 320, 44)
+    pygame.draw.rect(renderer.screen, C_PANEL, btn, border_radius=10)
+    pygame.draw.rect(renderer.screen, C_PANEL_ACC, btn, 2, border_radius=10)
+    start = font_sub.render("PRESS ENTER TO START", True, C_PLAYER)
+    renderer.screen.blit(start, start.get_rect(center=btn.center))
 
     controls = [
         "WASD / Arrow Keys  —  Move",
@@ -92,7 +126,7 @@ def draw_menu(renderer: Renderer) -> None:
         "ESC                —  Pause",
         "R                  —  Restart (on Game Over)",
     ]
-    y = 380
+    y = 360
     for line in controls:
         s = font_small.render(line, True, C_LIGHTGRAY)
         renderer.screen.blit(s, s.get_rect(center=(cx, y)))
@@ -100,7 +134,7 @@ def draw_menu(renderer: Renderer) -> None:
 
     # Module progress indicator
     note = font_small.render(
-        "[ Module 0: Core Engine — Stub AI ]", True, C_GRAY)
+        "Modules A–C: CSP • Search • Adversarial AI", True, C_GRAY)
     renderer.screen.blit(note, note.get_rect(center=(cx, SCREEN_HEIGHT - 30)))
 
 
@@ -114,7 +148,9 @@ def draw_between_levels(renderer: Renderer, level: int, score: int) -> None:
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode(
+        (SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SCALED | pygame.RESIZABLE
+    )
     pygame.display.set_caption("Battle City — Tank 1990  |  AL2002 AI Lab")
     clock  = pygame.time.Clock()
 
@@ -154,7 +190,7 @@ def main():
 
                 elif state == STATE_WIN:
                     if event.key == pygame.K_RETURN:
-                        if current_lvl < 2:
+                        if current_lvl < 3:
                             current_lvl += 1
                             player, spawner = load_level(current_lvl, grid)
                             player_ref = player

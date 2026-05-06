@@ -19,13 +19,13 @@ class Renderer:
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
         pygame.font.init()
-        self.font_large  = pygame.font.SysFont('Courier New', 28, bold=True)
-        self.font_medium = pygame.font.SysFont('Courier New', 18, bold=True)
-        self.font_small  = pygame.font.SysFont('Courier New', 13)
+        self.font_large  = pygame.font.SysFont('Bahnschrift', 28, bold=True)
+        self.font_medium = pygame.font.SysFont('Bahnschrift', 18, bold=True)
+        self.font_small  = pygame.font.SysFont('Bahnschrift', 13)
 
     # ── Master draw call ──────────────────────────────────────
     def draw(self, game_state: dict) -> None:
-        self.screen.fill(C_BLACK)
+        self._draw_background()
         self._draw_grid(game_state['grid'])
         self._draw_eagle(game_state['grid'])
         self._draw_bullets(game_state['bullets'])
@@ -43,6 +43,7 @@ class Renderer:
 
                 if tile == EMPTY:
                     pygame.draw.rect(self.screen, C_EMPTY, rect)
+                    pygame.draw.rect(self.screen, C_GRID_LINE, rect, 1)
 
                 elif tile == BRICK:
                     pygame.draw.rect(self.screen, C_BRICK, rect)
@@ -70,9 +71,9 @@ class Renderer:
 
                 elif tile == WATER:
                     pygame.draw.rect(self.screen, C_WATER, rect)
-                    # Wave lines
+                    # Wave lines (animated using a time offset)
                     for i in range(2):
-                        wy = ry + 6 + i * 10
+                        wy = ry + 5 + i * 10 + (self._time_offset % 4)
                         pygame.draw.arc(self.screen, C_WATER_DARK,
                                         (rx + 2, wy, 8, 4), 0, 3.14, 2)
                         pygame.draw.arc(self.screen, C_WATER_DARK,
@@ -83,6 +84,7 @@ class Renderer:
                     # Forest drawn LAST (over tanks) — handled in draw_tanks
                     # Here just draw the base
                     pygame.draw.rect(self.screen, C_FOREST, rect, 0)
+                    pygame.draw.rect(self.screen, C_GRID_LINE, rect, 1)
 
                 elif tile == EAGLE:
                     pass   # drawn separately
@@ -145,9 +147,16 @@ class Renderer:
         ts = TILE_SIZE
         color = tank.color
 
+        # Shadow
+        shadow = pygame.Rect(rx + 4, ry + 4, ts - 6, ts - 6)
+        pygame.draw.rect(self.screen, (0, 0, 0), shadow, border_radius=4)
+
         # Body
         body = pygame.Rect(rx + 3, ry + 3, ts - 6, ts - 6)
         pygame.draw.rect(self.screen, color, body, border_radius=3)
+
+        # Highlight edge
+        pygame.draw.rect(self.screen, C_WHITE, body, 1, border_radius=3)
 
         # Barrel (direction indicator)
         dx, dy = tank.direction
@@ -174,6 +183,10 @@ class Renderer:
             bx = b.x * TILE_SIZE + TILE_SIZE // 2
             by = b.y * TILE_SIZE + TILE_SIZE // 2
             col = C_BULLET_PLY if b.is_player_bullet else C_BULLET_ENE
+            # Glow
+            glow = pygame.Surface((16, 16), pygame.SRCALPHA)
+            pygame.draw.circle(glow, (*col, 80), (8, 8), 7)
+            self.screen.blit(glow, (bx - 8, by - 8))
             pygame.draw.circle(self.screen, col, (bx, by), 4)
             # Motion trail
             dx, dy = b.direction
@@ -185,10 +198,14 @@ class Renderer:
     def _draw_sidebar(self, game_state: dict) -> None:
         sx = GRID_PIXEL + 4
         w  = SIDEBAR_WIDTH - 8
-        pygame.draw.rect(self.screen, C_SIDEBAR,
+        pygame.draw.rect(self.screen, C_PANEL,
                          (GRID_PIXEL, 0, SIDEBAR_WIDTH, SCREEN_HEIGHT))
-        pygame.draw.line(self.screen, C_GRAY,
+        pygame.draw.line(self.screen, C_GRID_LINE,
                          (GRID_PIXEL, 0), (GRID_PIXEL, SCREEN_HEIGHT), 2)
+
+        # Accent strip
+        pygame.draw.rect(self.screen, C_PANEL_ACC,
+                         (GRID_PIXEL, 0, 3, SCREEN_HEIGHT))
 
         player  = game_state.get('player')
         level   = game_state.get('level', 1)
@@ -236,7 +253,7 @@ class Renderer:
     def draw_overlay(self, message: str, sub: str = '') -> None:
         """Draw a semi-transparent centered message overlay."""
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 160))
+        overlay.fill((0, 0, 0, 170))
         self.screen.blit(overlay, (0, 0))
 
         cx = GRID_PIXEL // 2
@@ -257,3 +274,20 @@ class Renderer:
         sub = "Press R to restart" if not won else "Press ENTER for next level"
         col = C_PLAYER if won else (220, 50, 50)
         self.draw_overlay(msg, sub)
+
+    # ── Background ─────────────────────────────────────────
+    def _draw_background(self) -> None:
+        # Vertical gradient
+        for y in range(SCREEN_HEIGHT):
+            t = y / SCREEN_HEIGHT
+            r = int(C_BG_TOP[0] * (1 - t) + C_BG_BOTTOM[0] * t)
+            g = int(C_BG_TOP[1] * (1 - t) + C_BG_BOTTOM[1] * t)
+            b = int(C_BG_TOP[2] * (1 - t) + C_BG_BOTTOM[2] * t)
+            pygame.draw.line(self.screen, (r, g, b), (0, y), (SCREEN_WIDTH, y))
+
+        # Subtle scanlines
+        for y in range(0, SCREEN_HEIGHT, 6):
+            pygame.draw.line(self.screen, (0, 0, 0), (0, y), (SCREEN_WIDTH, y), 1)
+
+        # Time offset used for water waves
+        self._time_offset = (getattr(self, "_time_offset", 0) + 1) % 60

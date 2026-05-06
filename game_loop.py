@@ -87,13 +87,14 @@ class GameLoop:
         gs = self._game_state()
 
         if self.player and self.player.alive:
+            self.player.update_timers()
             self.player.decide(gs)
 
         for enemy in self.enemies:
             if enemy.alive and enemy.active:
+                enemy.update_timers()
                 try:
-                    player_pos = (self.player.x, self.player.y) if self.player and self.player.alive else None
-                    enemy.decide(player_pos)
+                    enemy.decide(gs)
                 except Exception:
                     pass   # never crash game on AI error
 
@@ -109,9 +110,8 @@ class GameLoop:
                     pos.add((e.x, e.y))
             return pos
 
-        # Update timers + move player
+        # Move player
         if self.player and self.player.alive:
-            self.player.update_timers()
             if self.player._pending_direction:
                 occupied = occupied_positions(exclude=self.player)
                 dx, dy = self.player._pending_direction
@@ -125,7 +125,6 @@ class GameLoop:
         for enemy in self.enemies:
             if not (enemy.alive and enemy.active):
                 continue
-            enemy.update_timers()
             if enemy._pending_direction:
                 direction = enemy._pending_direction
                 dx, dy = direction
@@ -168,70 +167,11 @@ class GameLoop:
                 if not self.grid.in_bounds(b.x, b.y):
                     b.destroy()
                     break
+                if self._resolve_bullet_hit(b):
+                    break
 
     # ── Step 6: Collision detection ───────────────────────────
     def _step_collisions(self) -> None:
-        active = [b for b in self.bullets if b.active]
-
-        for b in active:
-            if not b.active:
-                continue
-            x, y = b.x, b.y
-
-            if not self.grid.in_bounds(x, y):
-                b.destroy()
-                continue
-
-            tile = self.grid.get(x, y)
-
-            # Bullet vs Eagle
-            if tile == EAGLE:
-                b.destroy()
-                self.eagle_alive = False
-                self.grid.set(*EAGLE_POS, EMPTY)
-                continue
-
-            # Bullet vs Brick
-            if tile == BRICK:
-                self.grid.destroy_brick(x, y)
-                b.destroy()
-                self._add_explosion(x, y)
-                continue
-
-            # Bullet vs Steel
-            if tile == STEEL:
-                b.destroy()
-                continue
-
-            # Bullet vs Water (shouldn't happen — tanks can't be here, but safety)
-            if tile == WATER:
-                b.destroy()
-                continue
-
-            # Bullet vs Player
-            if (self.player and self.player.alive
-                    and b.x == self.player.x and b.y == self.player.y
-                    and not b.is_player_bullet):
-                b.destroy()
-                self.player.take_hit()
-                if self.player.alive:
-                    self._add_explosion(x, y)
-                continue
-
-            # Bullet vs Enemies
-            for enemy in self.enemies:
-                if not (enemy.alive and enemy.active):
-                    continue
-                if b.x == enemy.x and b.y == enemy.y and b.is_player_bullet:
-                    b.destroy()
-                    enemy.take_hit()
-                    if not enemy.alive:
-                        self._add_explosion(enemy.x, enemy.y)
-                        self.kills += 1
-                        if self.player:
-                            self.player.score += self._score_for(enemy)
-                    break
-
         # Bullet vs Bullet (mutual destruction)
         active2 = [b for b in self.bullets if b.active]
         for i in range(len(active2)):
@@ -240,6 +180,63 @@ class GameLoop:
                 if bi.active and bj.active and bi.x == bj.x and bi.y == bj.y:
                     bi.destroy()
                     bj.destroy()
+
+    def _resolve_bullet_hit(self, b: Bullet) -> bool:
+        if not b.active:
+            return True
+
+        x, y = b.x, b.y
+        tile = self.grid.get(x, y)
+
+        # Bullet vs Eagle
+        if tile == EAGLE:
+            b.destroy()
+            self.eagle_alive = False
+            self.grid.set(*EAGLE_POS, EMPTY)
+            return True
+
+        # Bullet vs Brick
+        if tile == BRICK:
+            self.grid.destroy_brick(x, y)
+            b.destroy()
+            self._add_explosion(x, y)
+            return True
+
+        # Bullet vs Steel
+        if tile == STEEL:
+            b.destroy()
+            return True
+
+        # Bullet vs Water (shouldn't happen — tanks can't be here, but safety)
+        if tile == WATER:
+            b.destroy()
+            return True
+
+        # Bullet vs Player
+        if (self.player and self.player.alive
+                and b.x == self.player.x and b.y == self.player.y
+                and not b.is_player_bullet):
+            b.destroy()
+            self.player.take_hit()
+            if self.player.alive:
+                self._add_explosion(x, y)
+            return True
+
+        # Bullet vs Enemies
+        for enemy in self.enemies:
+            if not (enemy.alive and enemy.active):
+                continue
+            if b.x == enemy.x and b.y == enemy.y and b.is_player_bullet:
+                b.destroy()
+                enemy.take_hit()
+                if not enemy.alive:
+                    self._add_explosion(enemy.x, enemy.y)
+                    self.kills += 1
+                    if self.player:
+                        self.player.score += self._score_for(enemy)
+                return True
+
+        return False
 
     # ── Step 7: State update ──────────────────────────────────
     def _step_state(self) -> None:
@@ -252,7 +249,7 @@ class GameLoop:
 
     # ── Step 8: Spawn check ───────────────────────────────────
     def _step_spawn(self) -> None:
-        new_tank = self.spawner.update(self.enemies, self.player)
+        new_tank = self.spawner.update(self.enemies, self.player, self.kills)
         if new_tank:
             self.enemies.append(new_tank)
 

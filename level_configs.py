@@ -27,10 +27,10 @@ LEVEL_CONFIGS = {
         "name"          : "Level 1",
         "csp_level"     : 1,          # passed to CSPMapGenerator
         "enemy_pool"    : (
-            [(TYPE_BASIC, 7)] +       # 7 Basic tanks from start
-            [(TYPE_FAST,  5)]         # 5 Fast tanks after 10 kills
+            [(TYPE_BASIC, 7)] +
+            [(TYPE_FAST,  5)]
         ),
-        "fast_unlock_kills": 10,      # Fast tanks enter after 10 kills
+        "fast_unlock_kills": 7,
         "total_enemies" : 12,
         "description"   : "Dense brick map. Learn the basics.",
     },
@@ -39,12 +39,12 @@ LEVEL_CONFIGS = {
         "name"          : "Level 2",
         "csp_level"     : 2,
         "enemy_pool"    : (
-            [(TYPE_FAST,  4)] +
-            [(TYPE_ARMOR, 3)] +
-            [(TYPE_POWER, 2)]
+            [(TYPE_FAST,  8)] +
+            [(TYPE_ARMOR, 6)] +
+            [(TYPE_POWER, 6)]
         ),
-        "fast_unlock_kills": 0,       # All types active immediately
-        "total_enemies" : 9,
+        "fast_unlock_kills": 0,
+        "total_enemies" : 20,
         "description"   : "Mixed brick and steel. Armor tanks seek cover.",
     },
 
@@ -132,19 +132,15 @@ def load_map(level: int, seed: int = None) -> list[list[int]]:
 
 
 # ── Enemy pool builder ────────────────────────────────────
-def build_enemy_pool(level: int, kills: int = 0) -> list[str]:
+def build_enemy_pool(level: int) -> list[str]:
     """
     Returns a flat list of tank-type strings representing the
-    enemy queue for this level.  Fast-unlock gate is respected.
+    enemy queue for this level.
     """
     cfg = LEVEL_CONFIGS[level]
     pool = []
     for (tank_type, count) in cfg["enemy_pool"]:
-        if tank_type == TYPE_FAST and kills < cfg.get("fast_unlock_kills", 0):
-            # Replace fast tanks with basics until unlock threshold
-            pool.extend([TYPE_BASIC] * count)
-        else:
-            pool.extend([tank_type] * count)
+        pool.extend([tank_type] * count)
     return pool
 
 
