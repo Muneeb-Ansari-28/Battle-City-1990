@@ -37,14 +37,17 @@ class GameLoop:
         self.paused       = False
         self.status       = 'running'
 
-        # Explosion flash effects [(x, y, ttl)]
-        self._explosions: list = []
+        # Track boss phases for visuals
+        self._boss_phase = {}
 
         # Register grid change listener for AI path invalidation
         self.grid.add_change_listener(self._on_tile_change)
 
         # Track total enemies killed this level
         self.kills = 0
+
+        # Grass movement SFX cooldowns
+        self._grass_sfx_timers = {}
 
     # ── Main tick ─────────────────────────────────────────────
     def tick(self) -> str:
@@ -117,7 +120,9 @@ class GameLoop:
                 dx, dy = self.player._pending_direction
                 nx, ny = self.player.x + dx, self.player.y + dy
                 if (nx, ny) not in occupied:
-                    self.player.try_move(self.player._pending_direction, self.grid)
+                    moved = self.player.try_move(self.player._pending_direction, self.grid)
+                    if moved:
+                        self._maybe_play_grass(self.player)
                 else:
                     # Face direction even if blocked by tank
                     self.player.direction = self.player._pending_direction
@@ -138,7 +143,9 @@ class GameLoop:
                 if self.grid.get(nx, ny) == BRICK and enemy._want_shoot:
                     enemy.direction = direction
                 else:
-                    enemy.try_move(direction, self.grid)
+                    moved = enemy.try_move(direction, self.grid)
+                    if moved:
+                        self._maybe_play_grass(enemy)
 
     # ── Step 4: Shoot ─────────────────────────────────────────
     def _step_shoot(self) -> None:
@@ -146,6 +153,7 @@ class GameLoop:
                 and self.player._want_shoot):
             b = self.player.shoot()
             if b:
+                self._emit_muzzle(self.player)
                 self.bullets.append(b)
 
         for enemy in self.enemies:
@@ -154,6 +162,7 @@ class GameLoop:
             if enemy._want_shoot:
                 b = enemy.shoot()
                 if b:
+                    self._emit_muzzle(enemy)
                     self.bullets.append(b)
 
     # ── Step 5: Bullet update ─────────────────────────────────
@@ -166,6 +175,10 @@ class GameLoop:
                 if not b.active:
                     continue
                 b.step()
+                self.renderer.fx.smoke_trail(
+                    b.x * TILE_SIZE + TILE_SIZE // 2,
+                    b.y * TILE_SIZE + TILE_SIZE // 2,
+                )
                 # Stop immediately if out of bounds
                 if not self.grid.in_bounds(b.x, b.y):
                     b.destroy()
@@ -219,23 +232,39 @@ class GameLoop:
             b.destroy()
             self.eagle_alive = False
             self.grid.set(*EAGLE_POS, EMPTY)
+            self.renderer.fx.eagle_destroyed(
+                x * TILE_SIZE + TILE_SIZE // 2,
+                y * TILE_SIZE + TILE_SIZE // 2,
+            )
             return True
 
         # Bullet vs Brick
         if tile == BRICK:
             self.grid.destroy_brick(x, y)
             b.destroy()
-            self._add_explosion(x, y)
+            self._add_explosion(x, y, play_sound=False)
+            self.renderer.fx.impact_brick(
+                x * TILE_SIZE + TILE_SIZE // 2,
+                y * TILE_SIZE + TILE_SIZE // 2,
+            )
             return True
 
         # Bullet vs Steel
         if tile == STEEL:
             b.destroy()
+            self.renderer.fx.impact_steel(
+                x * TILE_SIZE + TILE_SIZE // 2,
+                y * TILE_SIZE + TILE_SIZE // 2,
+            )
             return True
 
         # Bullet vs Water (shouldn't happen — tanks can't be here, but safety)
         if tile == WATER:
             b.destroy()
+            self.renderer.fx.impact_water(
+                x * TILE_SIZE + TILE_SIZE // 2,
+                y * TILE_SIZE + TILE_SIZE // 2,
+            )
             return True
 
         # Bullet vs Player
@@ -246,6 +275,11 @@ class GameLoop:
             self.player.take_hit()
             if self.player.alive:
                 self._add_explosion(x, y)
+            else:
+                self.renderer.fx.explosion_large(
+                    x * TILE_SIZE + TILE_SIZE // 2,
+                    y * TILE_SIZE + TILE_SIZE // 2,
+                )
             return True
 
         # Bullet vs Enemies
@@ -257,6 +291,16 @@ class GameLoop:
                 enemy.take_hit()
                 if not enemy.alive:
                     self._add_explosion(enemy.x, enemy.y)
+                    if enemy.tank_type == TYPE_BOSS:
+                        self.renderer.fx.explosion_large(
+                            enemy.x * TILE_SIZE + TILE_SIZE // 2,
+                            enemy.y * TILE_SIZE + TILE_SIZE // 2,
+                        )
+                    else:
+                        self.renderer.fx.explosion_small(
+                            enemy.x * TILE_SIZE + TILE_SIZE // 2,
+                            enemy.y * TILE_SIZE + TILE_SIZE // 2,
+                        )
                     self.kills += 1
                     if self.player:
                         self.player.score += self._score_for(enemy)
@@ -269,21 +313,43 @@ class GameLoop:
         self.bullets  = [b for b in self.bullets if b.active]
         self.enemies  = [e for e in self.enemies if e.alive]
 
-        # Tick down explosions
-        self._explosions = [(x, y, t - 1)
-                            for x, y, t in self._explosions if t > 1]
+        # Boss phase change visuals
+        for enemy in self.enemies:
+            if enemy.tank_type != TYPE_BOSS:
+                continue
+            phase = 1
+            if enemy.hp <= BOSS_PHASE3_HP:
+                phase = 3
+            elif enemy.hp <= BOSS_PHASE2_HP:
+                phase = 2
+            prev = self._boss_phase.get(id(enemy), phase)
+            if phase != prev:
+                color = (80, 160, 255) if phase == 1 else (255, 150, 60) if phase == 2 else (255, 80, 80)
+                self.renderer.fx.boss_phase(
+                    enemy.x * TILE_SIZE + TILE_SIZE // 2,
+                    enemy.y * TILE_SIZE + TILE_SIZE // 2,
+                    color,
+                )
+            self._boss_phase[id(enemy)] = phase
+
+        # Cool down grass SFX timers
+        for key in list(self._grass_sfx_timers.keys()):
+            self._grass_sfx_timers[key] = max(0, self._grass_sfx_timers[key] - 1)
 
     # ── Step 8: Spawn check ───────────────────────────────────
     def _step_spawn(self) -> None:
         new_tank = self.spawner.update(self.enemies, self.player, self.kills)
         if new_tank:
             self.enemies.append(new_tank)
+            self.renderer.fx.spawn(
+                new_tank.x * TILE_SIZE + TILE_SIZE // 2,
+                new_tank.y * TILE_SIZE + TILE_SIZE // 2,
+            )
 
     # ── Step 9: Render ────────────────────────────────────────
     def _step_render(self) -> None:
         gs = self._game_state()
         self.renderer.draw(gs)
-        self._draw_explosions()
 
     # ── Step 10: Win / Lose ───────────────────────────────────
     def _check_win_lose(self) -> str:
@@ -314,6 +380,8 @@ class GameLoop:
             'enemies_remaining': (len(self.enemies)
                                   + self.spawner.remaining_in_pool),
             'level':             getattr(self, 'level', 1),
+            'ai_debug':          getattr(self.renderer, 'ai_debug', False),
+            'transition_alpha':  getattr(self.renderer, 'transition_alpha', 0),
         }
 
     def _score_for(self, tank) -> int:
@@ -325,18 +393,30 @@ class GameLoop:
             TYPE_BOSS:  1000,
         }.get(tank.tank_type, 100)
 
-    def _add_explosion(self, x: int, y: int) -> None:
-        self._explosions.append((x, y, 12))   # 12-tick flash
+    def _add_explosion(self, x: int, y: int, play_sound: bool = True) -> None:
+        self.renderer.fx.explosion_small(
+            x * TILE_SIZE + TILE_SIZE // 2,
+            y * TILE_SIZE + TILE_SIZE // 2,
+            play_sound=play_sound,
+        )
 
-    def _draw_explosions(self) -> None:
-        import pygame
-        for ex, ey, ttl in self._explosions:
-            alpha = int(255 * ttl / 12)
-            radius = int((12 - ttl + 4))
-            rx = ex * TILE_SIZE + TILE_SIZE // 2
-            ry = ey * TILE_SIZE + TILE_SIZE // 2
-            color = (255, 200 - (12 - ttl) * 10, 0)
-            pygame.draw.circle(self.renderer.screen, color, (rx, ry), radius)
+    def _emit_muzzle(self, tank) -> None:
+        dx, dy = tank.direction
+        mx = (tank.x + dx) * TILE_SIZE + TILE_SIZE // 2
+        my = (tank.y + dy) * TILE_SIZE + TILE_SIZE // 2
+        self.renderer.fx.muzzle(mx, my)
+        if tank.tank_type == TYPE_BOSS:
+            self.renderer.fx.shake.trigger(intensity=2.0, duration=6)
+
+    def _maybe_play_grass(self, tank) -> None:
+        if self.grid.get(tank.x, tank.y) != FOREST:
+            return
+        key = id(tank)
+        if self._grass_sfx_timers.get(key, 0) > 0:
+            return
+        if self.renderer.fx.sfx:
+            self.renderer.fx.sfx.play("grass", volume_scale=0.4)
+        self._grass_sfx_timers[key] = 10
 
     def _on_tile_change(self, x: int, y: int, old: int, new: int) -> None:
         """Notify all AI agents that the map has changed."""
