@@ -158,21 +158,47 @@ class GameLoop:
 
     # ── Step 5: Bullet update ─────────────────────────────────
     def _step_bullets(self) -> None:
-        for b in self.bullets:
-            if not b.active:
-                continue
-            for _ in range(BULLET_SPEED):
+        for _ in range(BULLET_SPEED):
+            active = [b for b in self.bullets if b.active]
+            prev_positions = {b.id: (b.x, b.y) for b in active}
+
+            for b in active:
+                if not b.active:
+                    continue
                 b.step()
                 # Stop immediately if out of bounds
                 if not self.grid.in_bounds(b.x, b.y):
                     b.destroy()
-                    break
+                    continue
                 if self._resolve_bullet_hit(b):
-                    break
+                    continue
+
+            # Bullet vs Bullet (same tile)
+            active_now = [b for b in self.bullets if b.active]
+            pos_map = {}
+            for b in active_now:
+                pos_map.setdefault((b.x, b.y), []).append(b)
+            for bullets in pos_map.values():
+                if len(bullets) > 1:
+                    for b in bullets:
+                        b.destroy()
+
+            # Bullet vs Bullet (crossing swap)
+            active_now = [b for b in self.bullets if b.active]
+            for i in range(len(active_now)):
+                for j in range(i + 1, len(active_now)):
+                    bi, bj = active_now[i], active_now[j]
+                    pi = prev_positions.get(bi.id)
+                    pj = prev_positions.get(bj.id)
+                    if not pi or not pj:
+                        continue
+                    if pi == (bj.x, bj.y) and pj == (bi.x, bi.y):
+                        bi.destroy()
+                        bj.destroy()
 
     # ── Step 6: Collision detection ───────────────────────────
     def _step_collisions(self) -> None:
-        # Bullet vs Bullet (mutual destruction)
+        # Bullet vs Bullet (redundant safety pass)
         active2 = [b for b in self.bullets if b.active]
         for i in range(len(active2)):
             for j in range(i + 1, len(active2)):

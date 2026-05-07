@@ -28,7 +28,10 @@ class Bullet:
         self.y += dy
 
     def destroy(self) -> None:
-        self.active = False
+        if self.active:
+            if hasattr(self.owner, "_active_bullet") and self.owner._active_bullet is self:
+                self.owner._active_bullet = None
+            self.active = False
 
     def __repr__(self) -> str:
         return (f"Bullet(id={self.id}, pos=({self.x},{self.y}), "

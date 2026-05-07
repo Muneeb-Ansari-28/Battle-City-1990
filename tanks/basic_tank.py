@@ -8,7 +8,7 @@ import random
 
 from constants import *
 from tanks.tank import Tank
-from ai.bfs import bfs_next_step, bfs_full_path
+from ai.bfs import bfs_next_step
 
 
 class BasicTank(Tank):
@@ -25,8 +25,6 @@ class BasicTank(Tank):
         self.grid = grid
         self.direction = DOWN
         self.active = False
-        self._bfs_timer = 0
-        self._path: list[tuple[int, int]] = []
 
     def decide(self, game_state: dict) -> None:
         self._pending_direction = None
@@ -37,11 +35,6 @@ class BasicTank(Tank):
 
         grid = game_state['grid']
         player = game_state.get('player')
-
-        self._bfs_timer += 1
-        if not self._path or self._bfs_timer >= BFS_RETRIGGER_TICKS:
-            self._recompute_bfs(grid)
-            self._bfs_timer = 0
 
         if self.can_shoot() and player and player.alive:
             if grid.line_of_sight(self.x, self.y, player.x, player.y):
@@ -55,7 +48,7 @@ class BasicTank(Tank):
                 self._want_shoot = True
                 return
 
-        next_tile = self._next_bfs_step(grid)
+        next_tile = bfs_next_step(grid, (self.x, self.y), EAGLE_POS)
         if next_tile is None:
             direction = self._random_free_direction(grid)
         else:
@@ -68,18 +61,7 @@ class BasicTank(Tank):
         self._pending_direction = direction
 
     def on_map_change(self, x: int, y: int, old: int, new: int) -> None:
-        if old == BRICK and new == EMPTY and (x, y) in self._path:
-            if self.grid:
-                self._recompute_bfs(self.grid)
-
-    def _recompute_bfs(self, grid) -> None:
-        full = bfs_full_path(grid, (self.x, self.y), EAGLE_POS)
-        self._path = full[1:] if len(full) > 1 else []
-
-    def _next_bfs_step(self, grid):
-        if self._path:
-            return self._path[0]
-        return bfs_next_step(grid, (self.x, self.y), EAGLE_POS)
+        return
 
     def _random_free_direction(self, grid) -> tuple[int, int] | None:
         candidates = []

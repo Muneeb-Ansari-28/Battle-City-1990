@@ -35,6 +35,9 @@ class Tank:
         self._pending_direction = None  # direction to move this tick
         self._want_shoot        = False
 
+        # Track a single active bullet per tank
+        self._active_bullet     = None
+
     # ── Called every tick by game loop ───────────────────────
     def update_timers(self) -> None:
         if self._move_timer > 0:
@@ -73,13 +76,19 @@ class Tank:
         Fire a bullet from the front of the tank.
         Returns a Bullet object, or None if on cooldown.
         """
+        if self._active_bullet is not None and self._active_bullet.active:
+            return None
+        if self._active_bullet is not None and not self._active_bullet.active:
+            self._active_bullet = None
         if not self.can_shoot():
             return None
         dx, dy = self.direction
         bx = self.x + dx
         by = self.y + dy
         self._fire_timer = self.fire_rate
-        return Bullet(bx, by, self.direction, self.tank_type, self)
+        bullet = Bullet(bx, by, self.direction, self.tank_type, self)
+        self._active_bullet = bullet
+        return bullet
 
     # ── Damage ───────────────────────────────────────────────
     def take_hit(self) -> None:

@@ -64,7 +64,7 @@ FIRE_BOSS_P3 = 24
 BULLET_SPEED = 2    # tiles per tick
 
 # ── Spawn constraints ───────────────────────────────────────
-MAX_ACTIVE_ENEMIES   = 3
+MAX_ACTIVE_ENEMIES   = 4
 ENEMY_POOL_SIZE      = 20
 SPAWN_FAIRNESS_DIST  = 10   # Manhattan distance
 SPAWN_DELAY_TICKS    = 60   # 2 s between spawns

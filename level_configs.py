@@ -30,7 +30,7 @@ LEVEL_CONFIGS = {
             [(TYPE_BASIC, 7)] +
             [(TYPE_FAST,  5)]
         ),
-        "fast_unlock_kills": 7,
+        "fast_unlock_kills": 10,
         "total_enemies" : 12,
         "description"   : "Dense brick map. Learn the basics.",
     },
@@ -39,12 +39,12 @@ LEVEL_CONFIGS = {
         "name"          : "Level 2",
         "csp_level"     : 2,
         "enemy_pool"    : (
-            [(TYPE_FAST,  8)] +
-            [(TYPE_ARMOR, 6)] +
-            [(TYPE_POWER, 6)]
+            [(TYPE_FAST,  4)] +
+            [(TYPE_ARMOR, 3)] +
+            [(TYPE_POWER, 2)]
         ),
         "fast_unlock_kills": 0,
-        "total_enemies" : 20,
+        "total_enemies" : 9,
         "description"   : "Mixed brick and steel. Armor tanks seek cover.",
     },
 
