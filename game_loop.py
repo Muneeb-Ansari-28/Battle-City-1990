@@ -3,6 +3,7 @@
 # ============================================================
 from constants import *
 from bullet import Bullet
+from level_configs import LEVEL_CONFIGS
 
 
 class GameLoop:
@@ -116,21 +117,27 @@ class GameLoop:
         # Move player
         if self.player and self.player.alive:
             if self.player._pending_direction:
-                occupied = occupied_positions(exclude=self.player)
-                dx, dy = self.player._pending_direction
-                nx, ny = self.player.x + dx, self.player.y + dy
-                if (nx, ny) not in occupied:
-                    moved = self.player.try_move(self.player._pending_direction, self.grid)
-                    if moved:
-                        self._maybe_play_grass(self.player)
-                else:
-                    # Face direction even if blocked by tank
+                if self.player._pending_direction != self.player.direction:
+                    # Turn in place first; move on the next tick
                     self.player.direction = self.player._pending_direction
+                else:
+                    occupied = occupied_positions(exclude=self.player)
+                    dx, dy = self.player._pending_direction
+                    nx, ny = self.player.x + dx, self.player.y + dy
+                    if (nx, ny) not in occupied:
+                        moved = self.player.try_move(self.player._pending_direction, self.grid)
+                        if moved:
+                            self._maybe_play_grass(self.player)
+                    else:
+                        # Face direction even if blocked by tank
+                        self.player.direction = self.player._pending_direction
 
         for enemy in self.enemies:
             if not (enemy.alive and enemy.active):
                 continue
             if enemy._pending_direction:
+                if not enemy.can_move():
+                    continue
                 direction = enemy._pending_direction
                 dx, dy = direction
                 nx, ny = enemy.x + dx, enemy.y + dy
@@ -370,6 +377,11 @@ class GameLoop:
 
     # ── Helpers ───────────────────────────────────────────────
     def _game_state(self) -> dict:
+        level = getattr(self, 'level', 1)
+        stage_cfg = LEVEL_CONFIGS.get(level, {})
+        stage_name = stage_cfg.get('name', f"Stage {level}")
+        if stage_name.startswith("Level "):
+            stage_name = f"Stage {stage_name[6:]}"
         return {
             'grid':              self.grid,
             'player':            self.player,
@@ -379,7 +391,10 @@ class GameLoop:
             'kills':             self.kills,
             'enemies_remaining': (len(self.enemies)
                                   + self.spawner.remaining_in_pool),
-            'level':             getattr(self, 'level', 1),
+            'level':             level,
+            'stage_name':        stage_name,
+            'stage_desc':        stage_cfg.get('description', ''),
+            'mode_label':        getattr(self, 'mode_label', 'Adventure (Normal)'),
             'ai_debug':          getattr(self.renderer, 'ai_debug', False),
             'transition_alpha':  getattr(self.renderer, 'transition_alpha', 0),
         }

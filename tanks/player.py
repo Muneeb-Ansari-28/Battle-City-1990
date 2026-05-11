@@ -14,6 +14,7 @@ class PlayerTank(Tank):
     Controlled by WASD or Arrow Keys.
     Player CAN move AND shoot simultaneously (per spec).
     """
+    TURN_HOLD_TICKS = 6
 
     def __init__(self, x: int = None, y: int = None):
         px = PLAYER_SPAWN[0] if x is None else x
@@ -35,6 +36,17 @@ class PlayerTank(Tank):
         # Filled by decide() from keyboard state
         self._pending_direction = None
         self._want_shoot        = False
+        # Turn on first press, move on second press.
+        # Once moving, keep moving while the key is held.
+        self._turn_only_dir     = None
+        self._turn_hold_ticks   = 0
+        self._move_hold_dir     = None
+        self._prev_dir_pressed  = {
+            UP: False,
+            DOWN: False,
+            LEFT: False,
+            RIGHT: False,
+        }
 
         # Invincibility frames after respawn
         self._invincible_timer  = 0
@@ -46,14 +58,56 @@ class PlayerTank(Tank):
         self._pending_direction = None
         self._want_shoot        = False
 
-        if keys[pygame.K_UP]    or keys[pygame.K_w]:
-            self._pending_direction = UP
-        elif keys[pygame.K_DOWN]  or keys[pygame.K_s]:
-            self._pending_direction = DOWN
-        elif keys[pygame.K_LEFT]  or keys[pygame.K_a]:
-            self._pending_direction = LEFT
-        elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self._pending_direction = RIGHT
+        dir_pressed = {
+            UP: keys[pygame.K_UP] or keys[pygame.K_w],
+            DOWN: keys[pygame.K_DOWN] or keys[pygame.K_s],
+            LEFT: keys[pygame.K_LEFT] or keys[pygame.K_a],
+            RIGHT: keys[pygame.K_RIGHT] or keys[pygame.K_d],
+        }
+        just_pressed = {
+            direction: (pressed and not self._prev_dir_pressed.get(direction, False))
+            for direction, pressed in dir_pressed.items()
+        }
+        self._prev_dir_pressed = dir_pressed
+
+        just_dir = None
+        if just_pressed[UP]:
+            just_dir = UP
+        elif just_pressed[DOWN]:
+            just_dir = DOWN
+        elif just_pressed[LEFT]:
+            just_dir = LEFT
+        elif just_pressed[RIGHT]:
+            just_dir = RIGHT
+
+        if just_dir:
+            if just_dir != self.direction:
+                self._turn_only_dir = just_dir
+                self._turn_hold_ticks = 0
+                self._move_hold_dir = None
+                self._pending_direction = just_dir
+            else:
+                if self._turn_only_dir == just_dir:
+                    self._turn_only_dir = None
+                    self._turn_hold_ticks = 0
+                self._move_hold_dir = just_dir
+                self._pending_direction = just_dir
+        else:
+            if self._turn_only_dir:
+                if dir_pressed.get(self._turn_only_dir, False):
+                    self._turn_hold_ticks += 1
+                    if self._turn_hold_ticks >= self.TURN_HOLD_TICKS:
+                        self._move_hold_dir = self._turn_only_dir
+                        self._turn_only_dir = None
+                        self._turn_hold_ticks = 0
+                        self._pending_direction = self._move_hold_dir
+                else:
+                    self._turn_hold_ticks = 0
+            elif (self._move_hold_dir
+                    and dir_pressed.get(self._move_hold_dir, False)):
+                self._pending_direction = self._move_hold_dir
+            else:
+                self._move_hold_dir = None
 
         if keys[pygame.K_SPACE] or keys[pygame.K_j]:
             self._want_shoot = True
@@ -86,6 +140,16 @@ class PlayerTank(Tank):
         self._fire_timer    = 0
         self._move_timer    = 0
         self._invincible_timer = self.INVINCIBLE_TICKS
+        self._pending_direction = None
+        self._turn_only_dir = None
+        self._turn_hold_ticks = 0
+        self._move_hold_dir = None
+        self._prev_dir_pressed = {
+            UP: False,
+            DOWN: False,
+            LEFT: False,
+            RIGHT: False,
+        }
 
     # ── Blink effect during invincibility ────────────────────
     @property
