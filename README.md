@@ -1,6 +1,6 @@
 # Battle City 1990
 
-Battle City 1990 is a Python + Pygame reimplementation of the classic top-down tank game, built for the AL2002 Artificial Intelligence Lab. The project runs on a 26x26 tile grid and uses AI concepts as the core gameplay system rather than as a side feature.
+Battle City 1990 is a Python + Pygame reimplementation of the classic top-down tank game. The project runs on a 26x26 tile grid and uses AI concepts as the core gameplay system rather than as a side feature.
 
 ## Overview
 
@@ -11,6 +11,19 @@ The codebase is organized around three AI modules from the project guide:
 - Adversarial boss behavior using Minimax with Alpha-Beta pruning
 
 The game also includes a full loop with menu, play, pause, win/lose states, tank spawning, bullet collisions, destructible terrain, score tracking, lives, sound effects, and a polished HUD.
+
+## Game ScreenShots
+ # Menu
+<img width="1393" height="1111" alt="Image" src="https://github.com/user-attachments/assets/9cb05d27-b671-49b2-8252-cac931fb8ae6" />
+ 
+ # Stage 1 (OutPost)
+<img width="1512" height="1198" alt="Image" src="https://github.com/user-attachments/assets/9c127b36-f4e9-48a5-839b-d4c485c51b85" />
+
+ # Stage 2 (Steel Factory)
+ <img width="1501" height="1198" alt="Image" src="https://github.com/user-attachments/assets/a25c8209-0208-4894-9657-2c08191a75d7" />
+
+# Stage 3 (Boss Level)
+<img width="1500" height="1198" alt="Image" src="https://github.com/user-attachments/assets/db672fca-95fa-4e72-addf-2bc1e3b7fcf1" />
 
 ## Implemented Features
 
