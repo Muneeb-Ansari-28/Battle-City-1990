@@ -39,7 +39,7 @@ class Renderer:
         self._world_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         self._target = self._world_surface
         self._time_offset = 0
-        self._tank_prev_pos = {}
+        self._tank_anim = {}
         self._kill_feed = []
         self._last_kills = 0
         self._vignette = None
@@ -242,15 +242,41 @@ class Renderer:
             all_tanks.append(player)
         all_tanks.extend([e for e in enemies if e.active])
 
-        next_prev = {}
+        next_anim = {}
         for tank in all_tanks:
             if hasattr(tank, 'visible') and not tank.visible:
                 continue
-            prev = self._tank_prev_pos.get(id(tank))
-            moved = prev is not None and prev != (tank.x, tank.y)
-            self._draw_single_tank(tank, moved=moved)
-            next_prev[id(tank)] = (tank.x, tank.y)
-        self._tank_prev_pos = next_prev
+
+            tid = id(tank)
+            current = (tank.x, tank.y)
+            anim = self._tank_anim.get(tid)
+            if anim is None:
+                anim = {"from": current, "to": current}
+
+            if anim["to"] != current:
+                anim["from"] = anim["to"]
+                anim["to"] = current
+
+            fx, fy = anim["from"]
+            tx, ty = anim["to"]
+            progress = 1.0
+            if (fx, fy) != (tx, ty) and tank.speed > 0:
+                progress = 1.0 - (tank._move_timer / max(1, tank.speed))
+                if progress < 0.0:
+                    progress = 0.0
+                elif progress > 1.0:
+                    progress = 1.0
+
+            if progress >= 1.0:
+                anim["from"] = anim["to"]
+
+            interp_x = fx + (tx - fx) * progress
+            interp_y = fy + (ty - fy) * progress
+            moved = anim["from"] != anim["to"]
+            self._draw_single_tank(tank, render_pos=(interp_x, interp_y), moved=moved)
+            next_anim[tid] = anim
+
+        self._tank_anim = next_anim
 
         # Draw forest tiles OVER everything (partial observability)
         for y in range(GRID_SIZE):
@@ -266,10 +292,13 @@ class Renderer:
                         pygame.draw.circle(s, col, (dx, dy), 2)
                     surface.blit(s, (rx, ry))
 
-    def _draw_single_tank(self, tank, moved: bool = False) -> None:
+    def _draw_single_tank(self, tank, render_pos: tuple[float, float] | None = None,
+                          moved: bool = False) -> None:
         surface = self._target
-        rx = tank.x * TILE_SIZE
-        ry = tank.y * TILE_SIZE
+        if render_pos is None:
+            render_pos = (tank.x, tank.y)
+        rx = int(render_pos[0] * TILE_SIZE)
+        ry = int(render_pos[1] * TILE_SIZE)
         cx = rx + TILE_SIZE // 2
         cy = ry + TILE_SIZE // 2
         ts = TILE_SIZE
